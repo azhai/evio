@@ -27,16 +27,6 @@ The goal of this project is to create a server framework for Go that performs on
 
 ## Getting Started
 
-### Installing
-
-To start using evio, install Go and run `go get`:
-
-```sh
-$ go get -u github.com/tidwall/evio
-```
-
-This will retrieve the library.
-
 ### Usage
 
 Starting a server is easy with `evio`. Just set up your events and pass them to the `Serve` function along with the binding address(es). Each connections is represented as an `evio.Conn` object that is passed to various events to differentiate the clients. At any point you can close a client or shutdown the server by return a `Close` or `Shutdown` action from an event.
@@ -46,7 +36,7 @@ Example echo server that binds to port 5000:
 ```go
 package main
 
-import "github.com/tidwall/evio"
+import "github.com/azhai/evio"
 
 func main() {
 	var events evio.Events

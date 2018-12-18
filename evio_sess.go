@@ -12,8 +12,8 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/azhai/evio"
 	"github.com/oklog/ulid"
-	"github.com/tidwall/evio"
 )
 
 // A creator of session id
