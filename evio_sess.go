@@ -16,24 +16,10 @@ import (
 	"github.com/oklog/ulid"
 )
 
-// A creator of session id
-func RandomGUID() string {
-	now := time.Now()
-	source := rand.NewSource(now.UnixNano())
-	entropy := ulid.Monotonic(rand.New(source), 0)
-	randId := ulid.MustNew(ulid.Timestamp(now), entropy)
-	return randId.String()
-}
-
 type Session struct {
 	uid     string
 	SessId  string
 	// ... Add other data
-}
-
-// Create empty session
-func NewSession() *Session {
-	return &Session{SessId:RandomGUID()}
 }
 
 func (sess *Session) GetId() string {
@@ -44,19 +30,42 @@ func (sess *Session) SetId(uid string) {
 	sess.uid = uid
 }
 
-func GetClientId(in []byte) (uid string) {
-	// if len(in) > 15 {
-	//     uid = string(in[:15])
-	// } else {
-	//     uid = string(in)
-	// }
+// A creator of session id
+func RandomGUID() string {
+	now := time.Now()
+	source := rand.NewSource(now.UnixNano())
+	entropy := ulid.Monotonic(rand.New(source), 0)
+	randId := ulid.MustNew(ulid.Timestamp(now), entropy)
+	return randId.String()
+}
+
+// Create empty session
+func NewSession() *Session {
+	return &Session{SessId: RandomGUID()}
+}
+
+func CreateSession(c evio.Conn) (sess *Session) {
+	sess = NewSession()
+	evio.BindSession(c, sess)
 	return
 }
 
-func GetSessAndId(c evio.Conn) (sess *Session, uid string) {
+func LoadSession(c evio.Conn) (sess *Session, uid string) {
 	if cxt := evio.GetSession(c); cxt != nil {
 		sess = cxt.(*Session)
 		uid = sess.GetId()
+	}
+	return
+}
+
+func ReloadSession(c evio.Conn, newid string) (sess *Session, oldid string) {
+	sess, oldid = LoadSession(c)
+	if sess == nil {
+		sess = NewSession()
+	}
+	if oldid != newid {
+		sess.SetId(newid)
+		evio.BindSession(c, sess)
 	}
 	return
 }
@@ -78,20 +87,18 @@ func WakeupConn(uid string) (err error) {
 func main() {
 	var events = evio.Events{}
 	events.Opened = func(c evio.Conn) (out []byte, opts evio.Options, action evio.Action) {
-		sess := NewSession()
-		evio.BindSession(c, sess)
+		CreateSession(c)
 	}
 	events.Data = func(c evio.Conn, in []byte) (out []byte, action evio.Action) {
-		sess, uid := GetSessAndId(c)
-		if sess == nil {
-			sess = NewSession()
-		}
 		if in == nil { // Send, call by Wake()
-			// out = sess.xxx
-		} else if uid == "" { // Receive, first time
-			if uid = GetClientId(in); uid != "" {
-				sess.SetId(uid)
-				evio.BindSession(c, sess)
+			sess, uid := LoadSession(c)
+			if sess != nil {
+				// out = sess.xxx
+			}
+		} else { // Receive
+			var newid = '123456'
+			sess, oldid := ReloadSession(c, newid)
+			if oldid != newid { // first time
 			}
 		}
 		return
