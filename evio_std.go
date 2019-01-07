@@ -269,13 +269,15 @@ func stdloopRun(s *stdserver, l *stdloop) {
 			case *stdconn:
 				err = stdloopAccept(s, l, v)
 			case *stdin:
-				err = stdloopRead(s, l, v.c, v.in)
+				out, action := stdloopReadReceive(s, v.c, v.in)
+				err = stdloopRead(s, l, v.c, out, action)
 			case *stdudpconn:
 				err = stdloopReadUDP(s, l, v)
 			case *stderr:
 				err = stdloopError(s, l, v.c, v.err)
 			case wakeReq:
-				err = stdloopRead(s, l, v.c, nil)
+				out, action := stdloopReadSend(s, v.c)
+				err = stdloopRead(s, l, v.c, out, action)
 			}
 		}
 		if err != nil {
@@ -371,24 +373,8 @@ func (c *stddetachedConn) Close() error {
 
 func (c *stddetachedConn) Wake() {}
 
-func stdloopRead(s *stdserver, l *stdloop, c *stdconn, in []byte) error {
-	if atomic.LoadInt32(&c.done) == 2 {
-		if in != nil {
-			// should not ignore reads for detached connections
-			c.donein = append(c.donein, in...)
-		}
-		return nil
-	}
-	var (
-		err    error
-		out    []byte
-		action Action = None
-	)
-	if in == nil && s.events.Send != nil {
-		out, action = s.events.Send(c)
-	} else if in != nil && s.events.Receive != nil {
-		out, action = s.events.Receive(c, in)
-	}
+func stdloopRead(s *stdserver, l *stdloop, c *stdconn, out []byte, action Action) error {
+	var err error
 	if len(out) > 0 {
 		if s.events.PreWrite != nil {
 			s.events.PreWrite()
@@ -404,6 +390,25 @@ func stdloopRead(s *stdserver, l *stdloop, c *stdconn, in []byte) error {
 		return stdloopClose(s, l, c)
 	}
 	return err
+}
+
+func stdloopReadSend(s *stdserver, c *stdconn) ([]byte, Action) {
+	if s.events.Send != nil {
+		return s.events.Send(c)
+	}
+	return nil, None
+}
+
+func stdloopReadReceive(s *stdserver, c *stdconn, in []byte) ([]byte, Action) {
+	if atomic.LoadInt32(&c.done) == 2 {
+		// should not ignore reads for detached connections
+		c.donein = append(c.donein, in...)
+		return nil, None
+	}
+	if s.events.Receive != nil {
+		return s.events.Receive(c, in)
+	}
+	return nil, None
 }
 
 func stdloopReadUDP(s *stdserver, l *stdloop, c *stdudpconn) error {
